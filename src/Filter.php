@@ -180,7 +180,11 @@ class Filter
                 }
                 break;
             case self::IN:
-                //TODO: Implement
+                if ($or) {
+                    $q->orWhereIn($field, explode(',', $this->value));
+                } else {
+                    $q->whereIn($field, explode(',', $this->value));
+                }
                 break;
             case self::LESS_THAN:
                 if ($or) {
