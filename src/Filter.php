@@ -3,6 +3,8 @@
 namespace Savannabits\PrimevueDatatables;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Facades\DB;
 
 class Filter
 {
@@ -27,7 +29,7 @@ class Filter
 
     public function __construct(public string $field, public ?string $value = null, public ?string $matchMode = self::CONTAINS)
     {
-        $this->likeOperator = \DB::connection()->getPDO()->getAttribute(\PDO::ATTR_DRIVER_NAME) == 'pgsql' ? 'ILIKE' : 'LIKE';
+        $this->likeOperator = DB::connection()->getPDO()->getAttribute(\PDO::ATTR_DRIVER_NAME) == 'pgsql' ? 'ILIKE' : 'LIKE';
     }
 
     public function buildWhere(Builder &$q, ?bool $or = false)
@@ -91,6 +93,17 @@ class Filter
     }
     private function applyWhere(Builder &$q, string $field, ?bool $or = false)
     {
+        if (method_exists($q->getModel(), $field) && $q->getModel()->{$field}() instanceof Relation) {
+            if ($this->matchMode === self::IN) {
+                $method = $or ? 'orWhereHas' : 'whereHas';
+                $q->{$method}($field, function (Builder $query) {
+                    $relatedKeyName = $query->getModel()->getKeyName();
+                    $tableName = $query->getModel()->getTable();
+                    $query->whereIn($tableName . '.' . $relatedKeyName, explode(',', $this->value));
+                });
+                return;
+            }
+        }
         $jsonField = $this->isJsonFieldPath($field);
 
         switch ($this->matchMode) {
