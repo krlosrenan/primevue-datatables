@@ -91,8 +91,10 @@ class Filter
             }
         }
     }
+
     private function applyWhere(Builder &$q, string $field, ?bool $or = false)
     {
+        // Check if the field is actually a relation method on the model
         if (method_exists($q->getModel(), $field) && $q->getModel()->{$field}() instanceof Relation) {
             if ($this->matchMode === self::IN) {
                 $method = $or ? 'orWhereHas' : 'whereHas';
@@ -104,6 +106,17 @@ class Filter
                 return;
             }
         }
+
+        // --- AMBIGUITY CORRECTION ---
+        // If the field does not contain a period (e.g., 'id' or 'description') and is not a JSON path,
+        // we qualify it with the name of the current model table.
+        // This transforms 'id' into 'evaluations.id' (or the table that is in the context).
+        if (!str_contains($field, '.') && !$this->isJsonFieldPath($field)) {
+            $tableName = $q->getModel()->getTable();
+            $field = $tableName . '.' . $field;
+        }
+        // -------------------------------
+
         $jsonField = $this->isJsonFieldPath($field);
 
         switch ($this->matchMode) {
@@ -289,7 +302,7 @@ class Filter
      *
      * @param string $field The field string to check.
      * @return array|false Returns an array of path segments if the field is a JSON field path,
-     *                    or false otherwise.
+     * or false otherwise.
      */
     private function isJsonFieldPath(string $field): false|array
     {
