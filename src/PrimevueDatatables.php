@@ -106,7 +106,29 @@ class PrimevueDatatables
                 $with->push($exploded[0] . "." . $exploded[1]);
             }
         }
-        $query->with($with->toArray());
+        // Merge additional eager loads derived from searchable columns without
+        // overriding previously defined eager-load callbacks (e.g. withCount).
+        $existingEagerLoads = $query->getEagerLoads();
+
+        foreach ($with as $relation) {
+            $parts = explode('.', $relation);
+            $baseRelation = $parts[0] ?? $relation;
+            $nestedRelation = implode('.', array_slice($parts, 1));
+
+            $existingCallback = $existingEagerLoads[$baseRelation] ?? null;
+
+            $existingEagerLoads[$baseRelation] = function ($q) use ($existingCallback, $nestedRelation) {
+                if (is_callable($existingCallback)) {
+                    $existingCallback($q);
+                }
+
+                if ($nestedRelation) {
+                    $q->with($nestedRelation);
+                }
+            };
+        }
+
+        $query->setEagerLoads($existingEagerLoads);
         $this->applySort($query);
         return $query->paginate($this->perPage, page: $this->currentPage);
     }
